@@ -1,0 +1,296 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This template contains the networking resources for the eks cluster'
+
+Parameters:
+  Project:
+    Description: The project that this cluster is use for
+    Type: String
+
+  Environment:
+    Description: The environment (e.g., dev, prod)
+    Type: String
+
+  VPCBlock:
+    Description: The CIDR block for the VPC.
+    Type: String
+    Default: '12.0.0.0/16'
+
+  VPCBlockSub1:
+    Description: The CIDR block for the VPC.
+    Type: String
+    Default: '12.0.1.0/24'
+
+  VPCBlockSub2:
+    Description: The CIDR block for the VPC.
+    Type: String
+    Default: '12.0.2.0/24'
+
+  VPCBlockSub3:
+    Description: The CIDR block for the VPC.
+    Type: String
+    Default: '12.0.3.0/24'
+
+  VPCBlockSub4:
+    Description: The CIDR block for the VPC.
+    Type: String
+    Default: '12.0.4.0/24'
+
+
+Resources:
+
+  #----------------------------------------- network -------------------------------
+
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref VPCBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: 'default'
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${Project}-main-${Environment}'
+
+  PublicSubnetA:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: 'us-east-1a'
+      CidrBlock: !Ref VPCBlockSub3
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: !Sub 'kubernetes.io/cluster/${Project}-eks-cluster-${Environment}'
+          Value: 'owned'
+        - Key: 'kubernetes.io/role/elb'
+          Value: '1'
+        - Key: 'Name'
+          Value: 'public-us-east-1a'
+
+  PublicSubnetB:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: 'us-east-1b'
+      CidrBlock: !Ref VPCBlockSub1
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: !Sub 'kubernetes.io/cluster/${Project}-eks-cluster-${Environment}'
+          Value: 'owned'
+        - Key: 'kubernetes.io/role/elb'
+          Value: '1'
+        - Key: 'Name'
+          Value: 'public-us-east-1b'
+
+  PrivateSubnetA:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Sub 'us-east-1a'
+      CidrBlock: !Ref VPCBlockSub4
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: !Sub 'kubernetes.io/cluster/${Project}-eks-cluster-${Environment}'
+          Value: 'owned'
+        - Key: 'kubernetes.io/role/internal-elb'
+          Value: '1'
+        - Key: 'Name'
+          Value: !Sub 'private-us-east-1a'
+
+  PrivateSubnetB:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Sub 'us-east-1b'
+      CidrBlock: !Ref VPCBlockSub2
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: !Sub 'kubernetes.io/cluster/${Project}-eks-cluster-${Environment}'
+          Value: 'owned'
+        - Key: 'kubernetes.io/role/internal-elb'
+          Value: '1'
+        - Key: 'Name'
+          Value: !Sub 'private-us-east-1b'
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${Project}-igw-${Environment}'
+
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  EIPA:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: 'vpc'
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${Project}-nat-a-eip-${Environment}'
+
+  EIPB:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: 'vpc'
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${Project}-nat-b-eip-${Environment}'
+
+  NatGatewayA:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - Key: 'Name'
+          Value:  !Sub '${Project}-nat-a-${Environment}'
+      AllocationId: !GetAtt EIPA.AllocationId
+
+  NatGatewayB:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${Project}-nat-b-${Environment}'
+      AllocationId: !GetAtt EIPB.AllocationId
+
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${Project}-public-rt-${Environment}'
+
+  PublicRouteTableAssociationA:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+  
+  PublicRouteTableAssociationB:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTableA:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${Project}-private-rt-a-${Environment}'
+
+  PrivateRouteTableAssociationA:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTableA
+
+  PrivateRouteTableB:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: 'Name'
+          Value: !Sub '${Project}-private-rt-b-${Environment}'
+
+  PrivateRouteTableAssociationB:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTableB
+
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteA:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NatGatewayA
+      RouteTableId: !Ref PrivateRouteTableA
+
+  PrivateRouteB:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NatGatewayB
+      RouteTableId: !Ref PrivateRouteTableB
+
+Outputs:
+  PublicSubnetA:
+    Description: PublicSubnetA
+    Value:
+      Ref: PublicSubnetA
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PublicSubnetA"
+
+  PublicSubnetB:
+    Description: PublicSubnetB
+    Value:
+      Ref: PublicSubnetB
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PublicSubnetB"
+
+  PrivateSubnetA:
+    Description: PrivateSubnetA
+    Value:
+      Ref: PrivateSubnetA
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PrivateSubnetA"
+
+  PrivateSubnetB:
+    Description: PrivateSubnetB
+    Value:
+      Ref: PrivateSubnetB
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PrivateSubnetB"
+  
+  VPC:
+    Description: VPC
+    Value:
+      Ref: VPC
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-VPC"
+
+  # in case you may want to pass certain attributes
+  
+  # WebServerSecurityGroup:
+  #   Description: The security group ID to use for public web servers
+  #   Value:
+  #     Fn::GetAtt:
+  #     - WebServerSecurityGroup
+  #     - GroupId
+  #   Export:
+  #     Name:
+  #       Fn::Sub: "${AWS::StackName}-SecurityGroupID"
+
+
+  # ----------------------------------------- alb controller -------------------------------
+
+  # moved this rol to terraform since is use for kubernetes resources
+
+  # ----------------------------------------- external dns ---------------------------------
+
+  # moved this rol to terraform since is use for kubernetes resources
+
+
+
+
+  
+

@@ -1,0 +1,23 @@
+apiVersion: v1
+data:
+  mapRoles: |
+    - groups:
+      - system:bootstrappers
+      - system:nodes
+      rolearn: arn:aws:iam::438555236323:role/prueba-eks-eks-nodes-rol-dev
+      username: system:node:{{EC2PrivateDNSName}}
+  mapUsers: |
+    - userarn: arn:aws:iam::438555236323:user/admin
+      username: admin
+      groups:
+        - system:masters
+kind: ConfigMap
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"mapRoles":"- groups:\n  - system:bootstrappers\n  - system:nodes\n  rolearn: arn:aws:iam::438555236323:role/prueba-eks-eks-nodes-rol-dev\n  username: system:node:{{EC2PrivateDNSName}}\n","mapUsers":"- userarn: arn:aws:iam::438555236323:user/azure\n  username: azure\n  groups:\n    - system:masters\n"},"kind":"ConfigMap","metadata":{"annotations":{},"creationTimestamp":"2024-04-16T14:29:20Z","name":"aws-auth","namespace":"kube-system","resourceVersion":"1009","uid":"b5d1dacd-cb5a-4a3f-a6ee-9e10ebe92a05"}}
+  creationTimestamp: "2024-04-16T14:29:20Z"
+  name: aws-auth
+  namespace: kube-system
+  resourceVersion: "13486"
+  uid: b5d1dacd-cb5a-4a3f-a6ee-9e10ebe92a05

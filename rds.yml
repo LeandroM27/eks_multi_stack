@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This template contains the resources for to deploy an rds instance, containing a database'
+
+Parameters:
+  Project:
+    Description: The project that this cluster is use for
+    Type: String
+
+  Environment:
+    Description: The environment (e.g., dev, prod)
+    Type: String
+  
+  VPCBlock:
+    Description: The CIDR block for the VPC.
+    Type: String
+    Default: '12.0.0.0/16'
+
+Resources:
+
+# ----------------------------------------- rds ------------------------------------------
+
+  RDSSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'rds sg'
+      GroupName: !Sub '${Project}-rds-sg-${Environment}'
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${NetworkStackName}-VPC"
+      SecurityGroupIngress:
+        - CidrIp: !Ref VPCBlock
+          FromPort: 5432
+          IpProtocol: 'tcp'
+          ToPort: 5432
+      SecurityGroupEgress:
+        - CidrIp: '0.0.0.0/0'
+          IpProtocol: '-1'
+
+  RDSDBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: 'utility cluster subnet group'
+      DBSubnetGroupName: !Sub '${Project}-subnet-gr-${Environment}'
+      SubnetIds:
+        - Fn::ImportValue:
+              Fn::Sub: "${NetworkStackName}-PrivateSubnetA"
+        - Fn::ImportValue:
+              Fn::Sub: "${NetworkStackName}-PrivateSubnetB"
+
+  RDSDBInstance:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      DBInstanceIdentifier: !Sub '${Project}-sonardb-${Environment}'
+      AllocatedStorage: 20
+      DBInstanceClass: 'db.t3.micro'
+      Engine: 'postgres'
+      MasterUsername: !Ref MasterUser
+      MasterUserPassword: !Ref MasterUserPassword
+      DBName: 'sonardb'
+      PreferredBackupWindow: '21:00-23:00'
+      BackupRetentionPeriod: 30
+      AvailabilityZone: 'us-east-1a'
+      PreferredMaintenanceWindow: 'sun:00:00-sun:03:00'
+      MultiAZ: false
+      EngineVersion: '14.6'
+      AutoMinorVersionUpgrade: true
+      LicenseModel: 'postgresql-license'
+      PubliclyAccessible: false
+      StorageType: 'gp2'
+      Port: 5432
+      CopyTagsToSnapshot: false
+      MonitoringInterval: 0
+      EnableIAMDatabaseAuthentication: false
+      EnablePerformanceInsights: false
+      DeletionProtection: false
+      DBSubnetGroupName: !Sub '${Project}-subnet-gr-${Environment}'
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      # may all 3 need to be removed
+      DBParameterGroupName: 'default.postgres14'
+      OptionGroupName: 'default:postgres-14'
+      CACertificateIdentifier: 'rds-ca-rsa2048-g1'

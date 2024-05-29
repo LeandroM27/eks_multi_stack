@@ -1,0 +1,123 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This template contains the resources for an eks cluster'
+
+Parameters:
+  Project:
+    Description: The project that this cluster is use for
+    Type: String
+
+  Environment:
+    Description: The environment (e.g., dev, prod)
+    Type: String
+
+Resources:
+
+#----------------------------------------- eks cluster -------------------------------
+
+  IAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Path: '/'
+      RoleName: !Sub '${Project}-eks-rol-${Environment}'
+      AssumeRolePolicyDocument: '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"eks.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonEKSClusterPolicy'
+
+  IAMRole2:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Path: '/'
+      RoleName: !Sub '${Project}-eks-nodes-rol-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'ec2.amazonaws.com'
+            Action: 'sts:AssumeRole'
+          - Effect: 'Allow'
+            Principal:
+              Federated: 'arn:aws:iam::438555236323:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/${!Ref EKSCluster}'
+            Action: 'sts:AssumeRoleWithWebIdentity'
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy'
+        - 'arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly'
+        - 'arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy'
+
+  EKSCluster:
+    Type: 'AWS::EKS::Cluster'
+    Properties:
+      Name: !Sub '${Project}-eks-cluster-${Environment}'
+      RoleArn: !GetAtt IAMRole.Arn
+      Version: '1.23'
+      ResourcesVpcConfig:
+        SubnetIds:
+          - Fn::ImportValue:
+              Fn::Sub: "${NetworkStackName}-PublicSubnetA"
+          - Fn::ImportValue:
+              Fn::Sub: "${NetworkStackName}-PublicSubnetB"
+          - Fn::ImportValue:
+              Fn::Sub: "${NetworkStackName}-PrivateSubnetA"
+          - Fn::ImportValue:
+              Fn::Sub: "${NetworkStackName}-PrivateSubnetB"
+      # this may need to be remove
+      KubernetesNetworkConfig:
+        ServiceIpv4Cidr: '10.100.0.0/16'
+
+  # EC2SecurityGroup2:
+  #   Type: 'AWS::EC2::SecurityGroup'
+  #   Properties:
+  #     GroupDescription: 'EKS created security group applied to ENI that is attached to EKS Control Plane master nodes, as well as any managed workloads.'
+  #     GroupName: !Sub 'eks-cluster-sg-${Project}-eks-cluster-${Environment}'
+  #     Tags:
+  #       - Key: !Sub 'kubernetes.io/cluster/${Project}-eks-cluster-${Environment}'
+  #         Value: 'owned'
+  #       - Key: 'Name'
+  #         Value: !Sub 'eks-cluster-sg-${Project}-eks-cluster-${Environment}'
+  #     VpcId: !Ref EC2VPC
+  #     SecurityGroupIngress:
+  #       - CidrIp: '0.0.0.0/0'
+  #         IpProtocol: '-1'
+  #     SecurityGroupEgress:
+  #       - CidrIp: '0.0.0.0/0'
+  #         IpProtocol: '-1'
+
+  EKSNodegroup:
+    Type: 'AWS::EKS::Nodegroup'
+    Properties:
+      NodegroupName: !Sub '${Project}-private-nodes-${Environment}'
+      ClusterName: !Ref EKSCluster
+      Version: '1.23'
+      ScalingConfig:
+        MinSize: 1
+        MaxSize: 10
+        DesiredSize: 4
+      InstanceTypes:
+        - 't3.medium'
+      Subnets:
+        - Fn::ImportValue:
+              Fn::Sub: "${NetworkStackName}-PrivateSubnetA"
+        - Fn::ImportValue:
+              Fn::Sub: "${NetworkStackName}-PrivateSubnetB"
+      NodeRole: !GetAtt IAMRole2.Arn
+      Labels:
+        role: 'general'
+      DiskSize: 20
+      Tags: {}
+      CapacityType: 'ON_DEMAND'
+      RemoteAccess:
+        Ec2SshKey: !Sub 'agricola_${Environment}'
+
+    
+
+
+  # ----------------------------------------- node autoscaler -------------------------------
+
+  IAMManagedPolicy2:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: !Sub '${Project}-autoscaler-pol-${Environment}'
+      Path: '/'
+      PolicyDocument: '{"Statement":[{"Action":["autoscaling:DescribeAutoScalingGroups","autoscaling:DescribeAutoScalingInstances","autoscaling:DescribeLaunchConfigurations","autoscaling:DescribeTags","autoscaling:SetDesiredCapacity","autoscaling:TerminateInstanceInAutoScalingGroup","ec2:DescribeLaunchTemplateVersions"],"Effect":"Allow","Resource":"*"}],"Version":"2012-10-17"}'
