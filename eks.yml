@@ -10,6 +10,10 @@ Parameters:
     Description: The environment (e.g., dev, prod)
     Type: String
 
+  NetworkStackName:
+    Description: The name of the network stack
+    Type: String
+
 Resources:
 
 #----------------------------------------- eks cluster -------------------------------
@@ -36,10 +40,6 @@ Resources:
             Principal:
               Service: 'ec2.amazonaws.com'
             Action: 'sts:AssumeRole'
-          - Effect: 'Allow'
-            Principal:
-              Federated: 'arn:aws:iam::438555236323:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/${!Ref EKSCluster}'
-            Action: 'sts:AssumeRoleWithWebIdentity'
       MaxSessionDuration: 3600
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy'
@@ -54,35 +54,13 @@ Resources:
       Version: '1.23'
       ResourcesVpcConfig:
         SubnetIds:
-          - Fn::ImportValue:
-              Fn::Sub: "${NetworkStackName}-PublicSubnetA"
-          - Fn::ImportValue:
-              Fn::Sub: "${NetworkStackName}-PublicSubnetB"
-          - Fn::ImportValue:
-              Fn::Sub: "${NetworkStackName}-PrivateSubnetA"
-          - Fn::ImportValue:
-              Fn::Sub: "${NetworkStackName}-PrivateSubnetB"
+          - Fn::ImportValue: !Sub "${NetworkStackName}-PublicSubnetA"
+          - Fn::ImportValue: !Sub "${NetworkStackName}-PublicSubnetB"
+          - Fn::ImportValue: !Sub "${NetworkStackName}-PrivateSubnetA"
+          - Fn::ImportValue: !Sub "${NetworkStackName}-PrivateSubnetB"
       # this may need to be remove
       KubernetesNetworkConfig:
         ServiceIpv4Cidr: '10.100.0.0/16'
-
-  # EC2SecurityGroup2:
-  #   Type: 'AWS::EC2::SecurityGroup'
-  #   Properties:
-  #     GroupDescription: 'EKS created security group applied to ENI that is attached to EKS Control Plane master nodes, as well as any managed workloads.'
-  #     GroupName: !Sub 'eks-cluster-sg-${Project}-eks-cluster-${Environment}'
-  #     Tags:
-  #       - Key: !Sub 'kubernetes.io/cluster/${Project}-eks-cluster-${Environment}'
-  #         Value: 'owned'
-  #       - Key: 'Name'
-  #         Value: !Sub 'eks-cluster-sg-${Project}-eks-cluster-${Environment}'
-  #     VpcId: !Ref EC2VPC
-  #     SecurityGroupIngress:
-  #       - CidrIp: '0.0.0.0/0'
-  #         IpProtocol: '-1'
-  #     SecurityGroupEgress:
-  #       - CidrIp: '0.0.0.0/0'
-  #         IpProtocol: '-1'
 
   EKSNodegroup:
     Type: 'AWS::EKS::Nodegroup'
@@ -97,10 +75,8 @@ Resources:
       InstanceTypes:
         - 't3.medium'
       Subnets:
-        - Fn::ImportValue:
-              Fn::Sub: "${NetworkStackName}-PrivateSubnetA"
-        - Fn::ImportValue:
-              Fn::Sub: "${NetworkStackName}-PrivateSubnetB"
+        - Fn::ImportValue: !Sub "${NetworkStackName}-PrivateSubnetA"
+        - Fn::ImportValue: !Sub "${NetworkStackName}-PrivateSubnetB"
       NodeRole: !GetAtt IAMRole2.Arn
       Labels:
         role: 'general'

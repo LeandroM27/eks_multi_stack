@@ -1,0 +1,26 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This template contains an s3 bucket for later use'
+
+Parameters:
+  Project:
+    Description: The project that this cluster is use for
+    Type: String
+
+  Environment:
+    Description: The environment (e.g., dev, prod)
+    Type: String
+
+Resources:
+  TestBucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Delete
+    Properties:
+      BucketName: !Sub '${Project}-some-random-bucket-12-${Environment}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+
+  

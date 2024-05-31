@@ -1,0 +1,38 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This template contains the resources for an eks cluster'
+
+Parameters:
+  Project:
+    Description: The project that this cluster is use for
+    Type: String
+
+  Environment:
+    Description: The environment (e.g., dev, prod)
+    Type: String
+
+  NetworkStackName:
+    Description: The name of the network stack
+    Type: String
+
+Resources:
+
+  APIGateway2:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${Project}-main-${Environment}'
+      ProtocolType: 'HTTP'
+      Tags: 
+        - Key: Target
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref Project
+
+  APIGStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref APIGateway2
+      AutoDeploy: true
+      StageName: 'dev'
+      Tags: 
+        - Key: Project
+          Value: !Ref Project
